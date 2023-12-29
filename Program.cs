@@ -1,28 +1,40 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace ConsoleApp1
 {
+    // Enumerates the different types of tokens that can be identified by the lexer.
     public enum TokenType
     {
         Identifier,
         Number,
         Operator,
         Delimiter,
-        Keyword
+        Keyword,
+        SpecialChar, 
+        Comment    
     }
 
+    // Interface representing a token.
     public interface IToken
     {
         TokenType Type { get; }
         string Value { get; }
     }
 
+    // Interface representing a syntax node.
     public interface ISyntaxNode
     {
-        void Print(int indent = 0);
     }
 
+    // Abstract class for syntax nodes, provides a method for printing the node.
+    public abstract class SyntaxNode : ISyntaxNode
+    {
+        public abstract void Print(int indent = 0);
+    }
+
+    // Class representing a token with its type and value.
     public class Token : IToken
     {
         public TokenType Type { get; }
@@ -35,12 +47,14 @@ namespace ConsoleApp1
         }
     }
 
+    // Exception class for syntax-related exceptions.
     public class SyntaxException : Exception
     {
         public SyntaxException(string message) : base(message) { }
     }
 
-    public class IdentifierNode : ISyntaxNode
+    // Class representing a syntax node for an identifier.
+    public class IdentifierNode : SyntaxNode
     {
         public string Identifier { get; }
 
@@ -49,41 +63,43 @@ namespace ConsoleApp1
             Identifier = identifier;
         }
 
-        public void Print(int indent = 0)
+        public override void Print(int indent = 0)
         {
             Console.WriteLine($"{new string(' ', indent)}Identifier: {Identifier}");
         }
     }
 
-    public class NumberNode : ISyntaxNode
+    // Class representing a syntax node for a numeric value.
+    public class NumberNode : SyntaxNode
     {
-        public int Number { get; }
+        public double Value { get; }
 
-        public NumberNode(int number)
+        public NumberNode(double value)
         {
-            Number = number;
+            Value = value;
         }
 
-        public void Print(int indent = 0)
+        public override void Print(int indent = 0)
         {
-            Console.WriteLine($"{new string(' ', indent)}Number: {Number}");
+            Console.WriteLine($"{new string(' ', indent)}Number: {Value}");
         }
     }
 
-    public class BinaryExpressionNode : ISyntaxNode
+    // Class representing a syntax node for a binary expression.
+    public class BinaryExpressionNode : SyntaxNode
     {
-        public ISyntaxNode Left { get; }
-        public ISyntaxNode Right { get; }
+        public SyntaxNode Left { get; }
+        public SyntaxNode Right { get; }
         public TokenType Operator { get; }
 
-        public BinaryExpressionNode(ISyntaxNode left, ISyntaxNode right, TokenType @operator)
+        public BinaryExpressionNode(SyntaxNode left, SyntaxNode right, TokenType @operator)
         {
             Left = left;
             Right = right;
             Operator = @operator;
         }
 
-        public void Print(int indent = 0)
+        public override void Print(int indent = 0)
         {
             Console.WriteLine($"{new string(' ', indent)}Binary Expression: {Operator}");
             Left.Print(indent + 2);
@@ -91,18 +107,19 @@ namespace ConsoleApp1
         }
     }
 
-    public class AssignmentNode : ISyntaxNode
+    // Class representing a syntax node for an assignment.
+    public class AssignmentNode : SyntaxNode
     {
         public IdentifierNode Identifier { get; }
-        public ISyntaxNode Expression { get; }
+        public SyntaxNode Expression { get; }
 
-        public AssignmentNode(IdentifierNode identifier, ISyntaxNode expression)
+        public AssignmentNode(IdentifierNode identifier, SyntaxNode expression)
         {
             Identifier = identifier;
             Expression = expression;
         }
 
-        public void Print(int indent = 0)
+        public override void Print(int indent = 0)
         {
             Console.WriteLine($"{new string(' ', indent)}Assignment:");
             Identifier.Print(indent + 2);
@@ -110,38 +127,43 @@ namespace ConsoleApp1
         }
     }
 
-    public class DeclarationNode : ISyntaxNode
+    // Class representing a syntax node for a declaration.
+    public class DeclarationNode : SyntaxNode
     {
         public IdentifierNode Identifier { get; }
-        public ISyntaxNode Expression { get; }
+        public SyntaxNode Expression { get; }
 
-        public DeclarationNode(IdentifierNode identifier, ISyntaxNode expression)
+        public DeclarationNode(IdentifierNode identifier, SyntaxNode expression)
         {
             Identifier = identifier;
             Expression = expression;
         }
 
-        public void Print(int indent = 0)
+        public override void Print(int indent = 0)
         {
             Console.WriteLine($"{new string(' ', indent)}Declaration:");
             Identifier.Print(indent + 2);
-            Expression.Print(indent + 2);
+            Expression?.Print(indent + 2);
         }
     }
 
+    // Interface for the lexer, responsible for tokenizing the input.
     public interface ILexer
     {
         List<IToken> Tokenize();
     }
 
+    // Class implementing the lexer interface.
     public class Lexer : ILexer
     {
         private readonly string input;
         private int position;
 
+        // Dictionaries and sets for keywords, operators, and delimiters.
         private readonly Dictionary<string, TokenType> keywords = new Dictionary<string, TokenType>
         {
-            {"int", TokenType.Keyword}
+            {"int", TokenType.Keyword},
+            {"double", TokenType.Keyword}
         };
 
         private readonly Dictionary<char, TokenType> operators = new Dictionary<char, TokenType>
@@ -158,20 +180,24 @@ namespace ConsoleApp1
             '(', ')', '{', '}', ',', ';'
         };
 
+        // Constructor takes the input source code.
         public Lexer(string input)
         {
             this.input = input;
             position = 0;
         }
 
+        // Tokenizes the input and returns a list of tokens.
         public List<IToken> Tokenize()
         {
             var tokens = new List<IToken>();
 
+            // Loop through the input characters.
             while (position < input.Length)
             {
                 char currentChar = input[position];
 
+                // Check for letters to identify keywords or identifiers.
                 if (char.IsLetter(currentChar))
                 {
                     string identifier = ReadIdentifier();
@@ -184,25 +210,35 @@ namespace ConsoleApp1
                         tokens.Add(new Token(TokenType.Identifier, identifier));
                     }
                 }
-                else if (char.IsDigit(currentChar))
+              
+                else if (char.IsDigit(currentChar) || currentChar == '.')
                 {
                     string number = ReadNumber();
                     tokens.Add(new Token(TokenType.Number, number));
                 }
+                
                 else if (operators.ContainsKey(currentChar))
                 {
                     tokens.Add(new Token(operators[currentChar], currentChar.ToString()));
                     position++;
                 }
+                
                 else if (delimiters.Contains(currentChar))
                 {
                     tokens.Add(new Token(TokenType.Delimiter, currentChar.ToString()));
                     position++;
                 }
+                
+                else if (currentChar == '#')
+                {
+                    ReadComment();
+                }
+           
                 else if (char.IsWhiteSpace(currentChar))
                 {
                     position++;
                 }
+               
                 else
                 {
                     throw new SyntaxException("Invalid character: " + currentChar);
@@ -212,6 +248,7 @@ namespace ConsoleApp1
             return tokens;
         }
 
+        
         private string ReadIdentifier()
         {
             int startPosition = position;
@@ -222,20 +259,32 @@ namespace ConsoleApp1
             return input.Substring(startPosition, position - startPosition);
         }
 
+      
         private string ReadNumber()
         {
             int startPosition = position;
-            while (position < input.Length && char.IsDigit(input[position]))
+            while (position < input.Length && (char.IsDigit(input[position]) || input[position] == '.'))
             {
                 position++;
             }
             return input.Substring(startPosition, position - startPosition);
         }
+
+       
+        private void ReadComment()
+        {
+           
+            while (position < input.Length && input[position] != '\n')
+            {
+                position++;
+            }
+        }
     }
 
+   
     public interface IParser
     {
-        ISyntaxNode Parse();
+        SyntaxNode Parse();
     }
 
     public class Parser : IParser
@@ -243,12 +292,14 @@ namespace ConsoleApp1
         private readonly List<IToken> tokens;
         private int position = 0;
 
+     
         public Parser(List<IToken> tokens)
         {
             this.tokens = tokens;
         }
 
-        public ISyntaxNode Parse()
+       
+        public SyntaxNode Parse()
         {
             try
             {
@@ -261,14 +312,15 @@ namespace ConsoleApp1
             }
         }
 
-        private ISyntaxNode ParseProgram()
+        // Parses a program, which consists of statements.
+        private SyntaxNode ParseProgram()
         {
             return ParseStatement();
         }
 
-        private ISyntaxNode ParseStatement()
+       private SyntaxNode ParseStatement()
         {
-            if (Match(TokenType.Keyword, "int"))
+            if (Match(TokenType.Keyword, "int") || Match(TokenType.Keyword, "double") || Match(TokenType.Keyword, "float"))
             {
                 return ParseDeclaration();
             }
@@ -278,8 +330,11 @@ namespace ConsoleApp1
             }
         }
 
-        private ISyntaxNode ParseDeclaration()
+       
+        private SyntaxNode ParseDeclaration()
         {
+            var dataType = tokens[position].Value;
+            Match(TokenType.Keyword);
             var identifier = new IdentifierNode(tokens[position].Value);
             Match(TokenType.Identifier);
             if (Match(TokenType.Operator, "="))
@@ -293,31 +348,33 @@ namespace ConsoleApp1
             }
         }
 
-        private ISyntaxNode ParseExpression()
+  
+        private SyntaxNode ParseExpression()
         {
             var term = ParseTerm();
             return ParseExpressionPrime(term);
         }
 
-        private ISyntaxNode ParseExpressionPrime(ISyntaxNode left)
+        private SyntaxNode ParseExpressionPrime(SyntaxNode left)
         {
-            if (Match(TokenType.Operator, "+") || Match(TokenType.Operator, "-"))
+            while (Match(TokenType.Operator, "+") || Match(TokenType.Operator, "-"))
             {
                 var @operator = tokens[position - 1].Type;
                 var right = ParseTerm();
-                var binaryExpressionNode = new BinaryExpressionNode(left, right, @operator);
-                return ParseExpressionPrime(binaryExpressionNode);
+                left = new BinaryExpressionNode(left, right, @operator);
             }
             return left;
         }
 
-        private ISyntaxNode ParseTerm()
+        // Parses a term.
+        private SyntaxNode ParseTerm()
         {
             var factor = ParseFactor();
             return ParseTermPrime(factor);
         }
 
-        private ISyntaxNode ParseTermPrime(ISyntaxNode left)
+       
+        private SyntaxNode ParseTermPrime(SyntaxNode left)
         {
             if (Match(TokenType.Operator, "*") || Match(TokenType.Operator, "/"))
             {
@@ -329,7 +386,8 @@ namespace ConsoleApp1
             return left;
         }
 
-        private ISyntaxNode ParseFactor()
+      
+        private SyntaxNode ParseFactor()
         {
             if (Match(TokenType.Identifier))
             {
@@ -337,7 +395,7 @@ namespace ConsoleApp1
             }
             else if (Match(TokenType.Number))
             {
-                return new NumberNode(int.Parse(tokens[position - 1].Value));
+                return new NumberNode(double.Parse(tokens[position - 1].Value));
             }
             else if (Match(TokenType.Delimiter, "("))
             {
@@ -351,11 +409,13 @@ namespace ConsoleApp1
             }
         }
 
+        
         private bool Match(TokenType type)
         {
             return Match(type, null);
         }
 
+        
         private bool Match(TokenType type, string value)
         {
             if (position < tokens.Count && tokens[position].Type == type && (value == null || tokens[position].Value == value))
@@ -367,26 +427,31 @@ namespace ConsoleApp1
         }
     }
 
+    
     public class Program
     {
         public static void Main(string[] args)
         {
-            string sourceCode = "int x = 10 + 20;";
+            Console.WriteLine("Enter your input:");
+            string sourceCode = Console.ReadLine();
+
+            
             ILexer lexer = new Lexer(sourceCode);
+
+           
             List<IToken> tokens = lexer.Tokenize();
 
+           
             foreach (IToken token in tokens)
             {
                 Console.WriteLine($"Type: {token.Type}, Value: {token.Value}");
             }
 
-            // Create a parser
+            
             IParser parser = new Parser(tokens);
 
-            // Parse the source code
-            ISyntaxNode syntaxTree = parser.Parse();
+            SyntaxNode syntaxTree = parser.Parse();
 
-            // Print the syntax tree
             syntaxTree?.Print();
         }
     }
